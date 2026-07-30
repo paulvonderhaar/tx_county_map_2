@@ -1,0 +1,367 @@
+/* ------------------------------------------------------------------ tokens */
+
+:root {
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --border: #ddd9d0;
+  --text: #1d1c1a;
+  --text-muted: #6d6a63;
+  --accent: #a8451c;
+  --accent-soft: #f0d9cf;
+  --county-fill: #e3ded3;
+  --county-hover: #cdbfa8;
+  --county-stroke: #f6f5f2;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 8px 24px rgb(0 0 0 / 0.10);
+  --radius: 10px;
+  /* Texas is a shade wider than it is tall, so the map's width follows from
+     this. Capping the height keeps the whole state on screen next to its
+     popup without scrolling. */
+  --map-max-height: min(78vh, 900px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181a;
+    --surface: #202225;
+    --border: #34373b;
+    --text: #eceae6;
+    --text-muted: #9b9a96;
+    --accent: #e0793f;
+    --accent-soft: #3a2417;
+    --county-fill: #33363a;
+    --county-hover: #4e535a;
+    --county-stroke: #17181a;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.45);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 1.25rem 2rem;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+main, .site-header, .site-footer { max-width: 1080px; margin-inline: auto; }
+
+a { color: var(--accent); }
+
+/* ------------------------------------------------------------------ header */
+
+.site-header { padding: 1.6rem 0 1rem; }
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  letter-spacing: -0.02em;
+}
+
+.tagline { margin: 0.35rem 0 0; color: var(--text-muted); }
+
+/* ----------------------------------------------------------------- toolbar */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.search { position: relative; flex: 1 1 15rem; max-width: 22rem; }
+
+.search-icon {
+  position: absolute;
+  inset-inline-start: 0.7rem;
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  width: 1.05rem;
+  height: 1.05rem;
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+#search {
+  width: 100%;
+  padding: 0.55rem 0.75rem 0.55rem 2.3rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+#search::placeholder { color: var(--text-muted); }
+
+.search-results {
+  position: absolute;
+  z-index: 5;
+  inset-inline: 0;
+  top: calc(100% + 0.3rem);
+  max-height: 15rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.search-results li {
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.search-results li[aria-selected="true"],
+.search-results li:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.search-empty { color: var(--text-muted); cursor: default !important; }
+
+.controls { display: flex; gap: 0.4rem; }
+
+.btn {
+  padding: 0.5rem 0.8rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.btn-icon {
+  width: 2.4rem;
+  padding-inline: 0;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------- map */
+
+.map {
+  position: relative;
+  margin-inline: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  touch-action: none;
+}
+
+.map svg.map-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: var(--map-max-height);
+  cursor: grab;
+}
+
+.map svg.map-svg.is-panning { cursor: grabbing; }
+
+.county {
+  fill: var(--county-fill);
+  stroke: var(--county-stroke);
+  stroke-width: 0.9;
+  vector-effect: non-scaling-stroke;
+  transition: fill 90ms linear;
+}
+
+.county:hover { fill: var(--county-hover); }
+
+.county.is-selected,
+.county.is-selected:hover {
+  fill: var(--accent);
+}
+
+.county.is-focused {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+/* Every property here inherits, so app.js rescales the whole group at once
+   by setting font-size and stroke-width on this element. */
+.county-labels {
+  font-size: 10px;
+  font-weight: 500;
+  fill: var(--text);
+  stroke: var(--surface);
+  stroke-width: 3px;
+  paint-order: stroke;
+  text-anchor: middle;
+  pointer-events: none;
+  user-select: none;
+}
+
+.county-labels .is-hidden { display: none; }
+
+.status {
+  margin: 0;
+  padding: 4rem 1.5rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.status.is-error { color: var(--accent); }
+
+.status code {
+  padding: 0.1rem 0.35rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+/* ----------------------------------------------------------------- tooltip */
+
+.tooltip {
+  position: absolute;
+  z-index: 3;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  color: var(--surface);
+  background: var(--text);
+  border-radius: 5px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 90ms linear;
+}
+
+.tooltip.is-visible { opacity: 0.95; }
+
+/* ------------------------------------------------------------------- popup */
+
+.popup {
+  position: absolute;
+  z-index: 4;
+  width: min(19rem, calc(100% - 1.5rem));
+  padding: 0.9rem 1rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.popup[hidden] { display: none; }
+
+.popup-close {
+  position: absolute;
+  top: 0.35rem;
+  inset-inline-end: 0.35rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.popup-close:hover { color: var(--accent); background: var(--accent-soft); }
+
+.popup-title {
+  margin: 0;
+  padding-inline-end: 1.5rem;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+}
+
+.popup-meta {
+  margin: 0.15rem 0 0.6rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.popup-body { font-size: 0.92rem; }
+
+.popup-body p { margin: 0 0 0.6rem; }
+
+.popup-body p:last-child { margin-bottom: 0; }
+
+.popup-body .is-empty { color: var(--text-muted); font-style: italic; }
+
+/* ------------------------------------------------------------------ footer */
+
+.hint {
+  margin: 0.7rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+kbd {
+  padding: 0.05rem 0.3rem;
+  font: inherit;
+  font-size: 0.9em;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.site-footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.site-footer p { margin: 0; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ mobile */
+
+@media (max-width: 640px) {
+  body { padding-inline: 0.9rem; }
+
+  .popup {
+    position: fixed;
+    inset: auto 0 0 0;
+    width: 100%;
+    max-height: 55vh;
+    overflow-y: auto;
+    border-radius: var(--radius) var(--radius) 0 0;
+    border-inline: 0;
+    border-bottom: 0;
+  }
+
+  .hint { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}

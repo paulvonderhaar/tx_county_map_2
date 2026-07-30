@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Texas Counties</title>
+  <meta name="description" content="An interactive map of the 254 counties of Texas. Click a county to read about it.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <h1>Texas Counties</h1>
+    <p class="tagline">All 254 of them. Click a county to read about it.</p>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <div class="search">
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle>
+          <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
+        </svg>
+        <input
+          id="search"
+          type="text"
+          placeholder="Search for a county…"
+          autocomplete="off"
+          spellcheck="false"
+          role="combobox"
+          aria-expanded="false"
+          aria-controls="search-results"
+          aria-autocomplete="list"
+          aria-label="Search counties by name">
+        <ul id="search-results" class="search-results" role="listbox" aria-label="County search results" hidden></ul>
+      </div>
+
+      <div class="controls">
+        <button type="button" id="zoom-out" class="btn btn-icon" aria-label="Zoom out">&minus;</button>
+        <button type="button" id="zoom-in" class="btn btn-icon" aria-label="Zoom in">+</button>
+        <button type="button" id="reset" class="btn">Reset view</button>
+      </div>
+    </div>
+
+    <div id="map" class="map">
+      <p id="status" class="status">Loading map…</p>
+
+      <div id="tooltip" class="tooltip" aria-hidden="true"></div>
+
+      <div id="popup" class="popup" role="dialog" aria-labelledby="popup-title" hidden>
+        <button type="button" id="popup-close" class="popup-close" aria-label="Close">&times;</button>
+        <h2 id="popup-title" class="popup-title"></h2>
+        <p id="popup-meta" class="popup-meta"></p>
+        <div id="popup-body" class="popup-body"></div>
+      </div>
+    </div>
+
+    <p id="live" class="visually-hidden" aria-live="polite"></p>
+
+    <p class="hint">
+      Scroll or pinch to zoom, drag to pan. Focus the map and use the arrow keys to
+      move between counties, <kbd>Enter</kbd> to open, <kbd>Esc</kbd> to close.
+    </p>
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      Boundaries: <a href="https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html">U.S. Census Bureau</a>
+      cartographic boundary files, 2024 (public domain).
+    </p>
+  </footer>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+# Only needed to regenerate data/tx-counties.geojson. The website itself has
+# no build step and no dependencies.
+geopandas>=0.14

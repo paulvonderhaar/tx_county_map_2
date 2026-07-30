@@ -1,0 +1,23 @@
+# Cloudflare Pages reads this file to set response headers.
+# https://developers.cloudflare.com/pages/configuration/headers/
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+
+# Filenames are not content-hashed, so keep revalidation cheap rather than
+# caching hard. Boundaries almost never change; descriptions do.
+/assets/*
+  Cache-Control: public, max-age=3600, must-revalidate
+
+# The .geojson extension is not a content type Cloudflare recognises as text,
+# so declare it explicitly: without this the 1.4 MB file can be served
+# uncompressed instead of gzip/brotli'd down to roughly 360 KB.
+/data/tx-counties.geojson
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=86400, must-revalidate
+
+/data/counties.csv
+  Content-Type: text/csv; charset=utf-8
+  Cache-Control: public, max-age=60, must-revalidate
