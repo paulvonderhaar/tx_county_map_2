@@ -11,6 +11,7 @@
 
   var GEOJSON_URL = "data/tx-counties.geojson";
   var CSV_URL = "data/counties.csv";
+  var DATACENTERS_URL = "data/datacenters.csv";
 
   var VIEW_WIDTH = 1000;   // SVG user units across the widest part of Texas
   var MAX_ZOOM = 40;       // how far in the viewBox may zoom
@@ -33,7 +34,9 @@
     live: document.getElementById("live"),
     zoomIn: document.getElementById("zoom-in"),
     zoomOut: document.getElementById("zoom-out"),
-    reset: document.getElementById("reset")
+    reset: document.getElementById("reset"),
+    legend: document.getElementById("legend"),
+    layerButtons: document.querySelectorAll(".layer-btn")
   };
 
   var counties = [];                // { fips, name, path, cx, cy, width, description, node, labelNode }
@@ -43,6 +46,66 @@
   var view = null;                  // current viewBox
   var selected = null;              // fips whose popup is open
   var focused = null;               // fips under the keyboard cursor
+  var activeLayer = "none";         // which shading layer is showing
+
+  /* --------------------------------------------------------------- layers */
+
+  // Each layer reads one aggregate off a county and sorts it into a bin.
+  // Bins run highest first so the first match wins.
+  var LAYERS = {
+    projects: {
+      label: "Projects",
+      value: function (dc) { return dc.projects.length; },
+      disclosed: function () { return true; }, // a project is its own evidence
+      format: function (v) { return v === 1 ? "1 project" : v + " projects"; },
+      bins: [
+        { min: 4, label: "4 or more" },
+        { min: 2, label: "2 to 3" },
+        { min: 1, label: "1" }
+      ],
+      note: "Counts publicly reported projects, at any stage from proposed to operating."
+    },
+    power: {
+      label: "Power",
+      value: function (dc) { return dc.powerMw; },
+      disclosed: function (dc) { return dc.powerDisclosed > 0; },
+      format: formatMw,
+      bins: [
+        { min: 5000, label: "5,000 MW or more" },
+        { min: 1000, label: "1,000 to 4,999 MW" },
+        { min: 250, label: "250 to 999 MW" },
+        { min: 1, label: "under 250 MW" }
+      ],
+      note: "Totals add each project's lowest published figure, so they are floors. Announced capacity is not built capacity."
+    },
+    water: {
+      label: "Water",
+      value: function (dc) { return dc.waterGpd; },
+      disclosed: function (dc) { return dc.waterDisclosed > 0; },
+      format: formatGpd,
+      bins: [
+        { min: 5000000, label: "5m gal/day or more" },
+        { min: 1000000, label: "1m to 4.9m gal/day" },
+        { min: 100000, label: "100k to 999k gal/day" },
+        { min: 1, label: "under 100k gal/day" }
+      ],
+      note: "Water disclosure is voluntary in Texas and most operators publish nothing."
+    }
+  };
+
+  function formatMw(mw) {
+    return mw >= 1000 ? (mw / 1000).toLocaleString("en-US", {
+      maximumFractionDigits: 1
+    }) + " GW" : Math.round(mw).toLocaleString("en-US") + " MW";
+  }
+
+  function formatGpd(gpd) {
+    if (gpd >= 1000000) {
+      return (gpd / 1000000).toLocaleString("en-US", { maximumFractionDigits: 2 }) +
+        "m gal/day";
+    }
+    return Math.round(gpd).toLocaleString("en-US") + " gal/day";
+  }
 
   /* ------------------------------------------------------------------ CSV */
 
@@ -92,6 +155,59 @@
       var record = {};
       for (var i = 0; i < header.length; i++) record[header[i]] = (r[i] || "").trim();
       return record;
+    });
+  }
+
+  /* --------------------------------------------------------- data centers */
+
+  function toNumber(text) {
+    var n = parseFloat(text);
+    return isFinite(n) ? n : null;
+  }
+
+  // Attach data center projects to counties and roll up per-county totals.
+  // Totals deliberately use each project's LOW figure: where a source gives a
+  // range, or gives nothing, the county total must not overstate what has
+  // actually been published.
+  function attachDataCenters(records) {
+    records.forEach(function (record) {
+      var county = byFips[record.fips];
+      if (!county) {
+        if (record.fips) console.warn("datacenters.csv: unknown FIPS " + record.fips);
+        return;
+      }
+
+      var powerLow = toNumber(record.power_mw_low);
+      var powerHigh = toNumber(record.power_mw_high);
+      var waterLow = toNumber(record.water_gpd_low);
+      var waterHigh = toNumber(record.water_gpd_high);
+
+      county.dc.projects.push({
+        project: record.project,
+        operator: record.operator,
+        status: record.status,
+        powerLow: powerLow,
+        powerHigh: powerHigh,
+        waterLow: waterLow,
+        waterHigh: waterHigh,
+        flags: record.flags ? record.flags.split(";").filter(Boolean) : [],
+        notes: record.notes,
+        sourceUrl: record.source_url,
+        sourceTitle: record.source_title,
+        asOf: record.as_of
+      });
+
+      var power = powerLow !== null ? powerLow : powerHigh;
+      if (power !== null) {
+        county.dc.powerMw += power;
+        county.dc.powerDisclosed++;
+      }
+
+      var water = waterLow !== null ? waterLow : waterHigh;
+      if (water !== null) {
+        county.dc.waterGpd += water;
+        county.dc.waterDisclosed++;
+      }
     });
   }
 
@@ -175,7 +291,8 @@
         width: maxX - minX,
         // Rough rendered width of the label in px, for the does-it-fit test.
         labelWidth: props.name.length * LABEL_PX * 0.55,
-        description: ""
+        description: "",
+        dc: { projects: [], powerMw: 0, waterGpd: 0, powerDisclosed: 0, waterDisclosed: 0 }
       };
     });
   }
@@ -198,6 +315,21 @@
       "aria-label":
         "Map of Texas counties. Use the arrow keys to move between counties and Enter to open details."
     });
+
+    // Hatch marks the counties where projects are known but nobody has
+    // published a figure for the active layer.
+    var defs = svgEl("defs", {});
+    var pattern = svgEl("pattern", {
+      id: "hatch",
+      width: "6",
+      height: "6",
+      patternUnits: "userSpaceOnUse",
+      patternTransform: "rotate(45)"
+    });
+    pattern.appendChild(svgEl("rect", { width: "6", height: "6", fill: "var(--county-fill)" }));
+    pattern.appendChild(svgEl("rect", { width: "2.5", height: "6", fill: "var(--level-undisclosed)" }));
+    defs.appendChild(pattern);
+    svg.appendChild(defs);
 
     countyLayer = svgEl("g", { class: "county-layer" });
     labelLayer = svgEl("g", { class: "county-labels", "aria-hidden": "true" });
@@ -225,6 +357,83 @@
 
     setView(home);
     attachMapEvents();
+  }
+
+  /* ------------------------------------------------------- layer painting */
+
+  var LEVEL_CLASSES = ["level-1", "level-2", "level-3", "level-4", "level-undisclosed"];
+
+  function levelFor(layer, county) {
+    if (!county.dc.projects.length) return null;
+    if (!layer.disclosed(county.dc)) return "level-undisclosed";
+    var value = layer.value(county.dc);
+    for (var i = 0; i < layer.bins.length; i++) {
+      if (value >= layer.bins[i].min) return "level-" + (layer.bins.length - i);
+    }
+    return "level-undisclosed";
+  }
+
+  function setLayer(id) {
+    activeLayer = id;
+    var layer = LAYERS[id];
+
+    counties.forEach(function (county) {
+      county.node.classList.remove.apply(county.node.classList, LEVEL_CLASSES);
+      if (!layer) return;
+      var level = levelFor(layer, county);
+      if (level) county.node.classList.add(level);
+    });
+
+    els.layerButtons.forEach(function (button) {
+      var on = button.getAttribute("data-layer") === id;
+      button.classList.toggle("is-active", on);
+      button.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+
+    renderLegend(layer);
+  }
+
+  function legendItem(swatchStyle, text) {
+    var item = document.createElement("span");
+    item.className = "legend-item";
+    var swatch = document.createElement("span");
+    swatch.className = "legend-swatch";
+    swatch.style.cssText = swatchStyle;
+    var label = document.createElement("span");
+    label.textContent = text;
+    item.appendChild(swatch);
+    item.appendChild(label);
+    return item;
+  }
+
+  function renderLegend(layer) {
+    els.legend.textContent = "";
+    if (!layer) {
+      els.legend.hidden = true;
+      return;
+    }
+
+    layer.bins.forEach(function (bin, index) {
+      var level = layer.bins.length - index;
+      els.legend.appendChild(
+        legendItem("background: var(--level-" + level + ")", bin.label)
+      );
+    });
+
+    els.legend.appendChild(legendItem(
+      "background: repeating-linear-gradient(45deg, var(--level-undisclosed) 0 3px, var(--county-fill) 3px 7px)",
+      "projects known, figure not published"
+    ));
+    els.legend.appendChild(legendItem(
+      "background: var(--county-fill)", "no projects publicly reported"
+    ));
+
+    var note = document.createElement("span");
+    note.className = "legend-note";
+    note.textContent = layer.note;
+    els.legend.appendChild(note);
+
+    els.legend.hidden = false;
   }
 
   /* ------------------------------------------------------------- view/zoom */
@@ -373,9 +582,132 @@
       });
     }
 
+    renderProjects(county);
+
+    els.popup.classList.toggle("has-projects", county.dc.projects.length > 0);
     els.popup.hidden = false;
     positionPopup(county);
-    announce(county.name + " County. " + (county.description || "No description yet."));
+    announce(
+      county.name + " County. " +
+      (county.description || "No description yet.") + " " +
+      (county.dc.projects.length
+        ? county.dc.projects.length + " data center projects publicly reported."
+        : "No data center projects publicly reported.")
+    );
+  }
+
+  // Render a value that a source may have given as a point, a range, or an
+  // open-ended bound. Never invents a midpoint.
+  function formatRange(low, high, format) {
+    if (low === null && high === null) return null;
+    if (low !== null && high !== null) {
+      return low === high ? format(low) : format(low) + " to " + format(high);
+    }
+    return low !== null ? format(low) + " or more" : "up to " + format(high);
+  }
+
+  function figure(label, text) {
+    var span = document.createElement("span");
+    var strong = document.createElement("strong");
+    strong.textContent = label + ": ";
+    span.appendChild(strong);
+    if (text) {
+      span.appendChild(document.createTextNode(text));
+    } else {
+      var unknown = document.createElement("span");
+      unknown.className = "is-unknown";
+      unknown.textContent = "not published";
+      span.appendChild(unknown);
+    }
+    return span;
+  }
+
+  function renderProjects(county) {
+    var dc = county.dc;
+    if (!dc.projects.length) return;
+
+    var section = document.createElement("div");
+    section.className = "dc-section";
+
+    var heading = document.createElement("h3");
+    heading.className = "dc-heading";
+    heading.textContent = "Data centers publicly reported";
+    section.appendChild(heading);
+
+    var totals = document.createElement("p");
+    totals.className = "dc-totals";
+    var count = document.createElement("strong");
+    count.textContent = LAYERS.projects.format(dc.projects.length);
+    totals.appendChild(count);
+    if (dc.powerDisclosed) {
+      totals.appendChild(document.createTextNode(
+        " · " + formatMw(dc.powerMw) + " (" + dc.powerDisclosed + " of " +
+        dc.projects.length + " disclose power)"
+      ));
+    }
+    if (dc.waterDisclosed) {
+      totals.appendChild(document.createTextNode(
+        " · " + formatGpd(dc.waterGpd) + " (" + dc.waterDisclosed + " of " +
+        dc.projects.length + " disclose water)"
+      ));
+    }
+    section.appendChild(totals);
+
+    dc.projects.forEach(function (p) {
+      var card = document.createElement("div");
+      card.className = "dc-project";
+
+      var name = document.createElement("p");
+      name.className = "dc-name";
+      name.textContent = p.project;
+      card.appendChild(name);
+
+      var operator = document.createElement("p");
+      operator.className = "dc-operator";
+      operator.textContent = p.operator;
+      operator.appendChild(document.createTextNode(" "));
+      var status = document.createElement("span");
+      status.className = "dc-badge status-" + p.status.replace(/\s+/g, "-");
+      status.textContent = p.status;
+      operator.appendChild(status);
+      p.flags.forEach(function (flag) {
+        var badge = document.createElement("span");
+        badge.className = "dc-badge flag";
+        badge.textContent = flag;
+        operator.appendChild(document.createTextNode(" "));
+        operator.appendChild(badge);
+      });
+      card.appendChild(operator);
+
+      var figures = document.createElement("p");
+      figures.className = "dc-figures";
+      figures.appendChild(figure("Power", formatRange(p.powerLow, p.powerHigh, formatMw)));
+      figures.appendChild(figure("Water", formatRange(p.waterLow, p.waterHigh, formatGpd)));
+      card.appendChild(figures);
+
+      if (p.notes) {
+        var notes = document.createElement("p");
+        notes.className = "dc-notes";
+        notes.textContent = p.notes;
+        card.appendChild(notes);
+      }
+
+      var source = document.createElement("p");
+      source.className = "dc-source";
+      var link = document.createElement("a");
+      link.href = p.sourceUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = p.sourceTitle || "source";
+      source.appendChild(document.createTextNode("Source: "));
+      source.appendChild(link);
+      if (p.asOf) source.appendChild(document.createTextNode(" (" + p.asOf + ")"));
+      card.appendChild(source);
+
+      section.appendChild(card);
+    });
+
+    els.popupBody.appendChild(section);
   }
 
   // Anchor the popup beside the county, nudged to stay inside the map. On
@@ -720,6 +1052,12 @@
     els.zoomIn.addEventListener("click", function () { zoomCenter(1.5); });
     els.zoomOut.addEventListener("click", function () { zoomCenter(1 / 1.5); });
 
+    els.layerButtons.forEach(function (button) {
+      button.addEventListener("click", function () {
+        setLayer(button.getAttribute("data-layer"));
+      });
+    });
+
     els.reset.addEventListener("click", function () {
       closePopup();
       setFocused(null);
@@ -759,9 +1097,12 @@
         if (!response.ok) throw new Error(GEOJSON_URL + " returned HTTP " + response.status);
         return response.json();
       }),
-      // Descriptions are optional: a missing CSV still leaves a working map,
-      // it just has empty popups.
+      // The two CSVs are optional: a missing or broken one still leaves a
+      // working map, it just has less in the popups.
       fetch(CSV_URL)
+        .then(function (response) { return response.ok ? response.text() : ""; })
+        .catch(function () { return ""; }),
+      fetch(DATACENTERS_URL)
         .then(function (response) { return response.ok ? response.text() : ""; })
         .catch(function () { return ""; })
     ]).then(function (results) {
@@ -774,9 +1115,12 @@
         else if (record.fips) console.warn("counties.csv: unknown FIPS " + record.fips);
       });
 
+      attachDataCenters(csvToRecords(results[2]));
+
       render();
       attachSearchEvents();
       attachChromeEvents();
+      setLayer("none");
       els.search.placeholder = "Search " + counties.length + " counties…";
     }).catch(function (error) {
       if (location.protocol === "file:") {
