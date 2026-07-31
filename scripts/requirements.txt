@@ -1,3 +1,9 @@
-# Only needed to regenerate data/tx-counties.geojson. The website itself has
-# no build step and no dependencies.
+# Only needed to regenerate the data files. The website itself has no build
+# step and no dependencies.
+#
+#   build_data.py          -> data/tx-counties.geojson   (needs geopandas)
+#   build_power_prices.py  -> data/power_prices.csv      (needs pandas, openpyxl)
+
 geopandas>=0.14
+pandas>=2.0
+openpyxl>=3.1
