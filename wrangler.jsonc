@@ -1,0 +1,18 @@
+{
+  // This site is static: there is no Worker script, only files to serve.
+  // Without this file, `wrangler versions upload` fails with "Missing
+  // entry-point to Worker script or to assets directory" because it cannot
+  // tell what to deploy.
+  //
+  // IMPORTANT: "name" must match the Worker this repository is connected to in
+  // the Cloudflare dashboard (Workers & Pages -> your project -> the name at
+  // the top). If it does not match, the build will deploy to the wrong Worker
+  // or fail outright.
+  "name": "tx-county-map-2",
+  "compatibility_date": "2026-07-31",
+  "assets": {
+    // The whole repository root is the site. Files that are not part of the
+    // website are excluded in .assetsignore.
+    "directory": "./"
+  }
+}

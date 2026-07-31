@@ -18,7 +18,9 @@ data/counties.csv           EDIT THIS — fips, name, description
 data/datacenters.csv        EDIT THIS — one row per data center project
 data/tx-counties.geojson    county boundaries (generated, don't hand-edit)
 scripts/build_data.py       regenerates the geojson from Census source data
-_headers                    Cloudflare Pages response headers
+wrangler.jsonc              Cloudflare deploy config (required — see below)
+.assetsignore               files kept out of the deployed site
+_headers                    response headers (caching, content types)
 ```
 
 ## Writing the descriptions
@@ -137,22 +139,36 @@ python -m http.server 8000
 
 Then open <http://localhost:8000>.
 
-## Deploy to Cloudflare Pages
+## Deploy to Cloudflare
 
-Push this folder to a GitHub repository, then in the Cloudflare dashboard:
+This repository deploys as a **Worker serving static assets**, configured by
+`wrangler.jsonc`. There is no Worker script and nothing to compile — the deploy
+is a file upload.
 
-1. **Workers & Pages** → **Create** → **Pages** → **Connect to Git**, and pick
-   the repository.
-2. Configure the build:
-   - Framework preset: **None**
-   - Build command: **leave empty**
-   - Build output directory: **`/`**
-3. **Save and Deploy.**
+`wrangler.jsonc` is what makes this work. Without it, Cloudflare's build runs
+`npx wrangler versions upload` and fails with *"Missing entry-point to Worker
+script or to assets directory"*, because wrangler has no way to know the
+repository root is a website rather than an unconfigured Worker project.
 
-There is nothing to compile, so the deploy is just a file upload. Every push to
-the default branch publishes automatically — including CSV edits made straight
-through the GitHub web editor, which is the quickest way to add descriptions
-once the site is live.
+**The `name` field must match your Worker.** Check it in the Cloudflare
+dashboard under **Workers & Pages**; if the Worker is called something other
+than `tx-county-map-2`, edit that one line or the build deploys to the wrong
+place.
+
+`.assetsignore` keeps non-website files (this README, `scripts/`, dotfiles) out
+of the upload. `_headers` is deliberately *not* listed there: Workers reads it
+to set response headers and never serves it as a file.
+
+Once connected, every push publishes automatically — including CSV edits made
+straight through the GitHub web editor, which is the quickest way to add
+descriptions once the site is live. Pushes to the production branch deploy
+live; other branches upload a preview version instead.
+
+### If you would rather use Cloudflare Pages
+
+Pages also works and ignores `wrangler.jsonc`. Create the project with
+**Workers & Pages → Create → Pages → Connect to Git**, framework preset
+**None**, build command **empty**, output directory **`/`**.
 
 ## Regenerating the boundaries
 

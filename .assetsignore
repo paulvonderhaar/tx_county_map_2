@@ -1,0 +1,17 @@
+# Repository files that are not part of the website. Wrangler skips anything
+# matching these patterns when uploading static assets. Same syntax as
+# .gitignore.
+#
+# Note that _headers is deliberately NOT listed: Workers parses it to set
+# response headers and never serves it as a file.
+
+.git/
+.github/
+.claude/
+node_modules/
+scripts/
+README.md
+.gitignore
+.gitattributes
+.assetsignore
+wrangler.jsonc
