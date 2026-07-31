@@ -36,6 +36,7 @@
     zoomOut: document.getElementById("zoom-out"),
     reset: document.getElementById("reset"),
     legend: document.getElementById("legend"),
+    coverage: document.getElementById("coverage"),
     layerButtons: document.querySelectorAll(".layer-btn")
   };
 
@@ -434,6 +435,29 @@
     els.legend.appendChild(note);
 
     els.legend.hidden = false;
+  }
+
+  // A one-line statement of how much of the state this data actually covers.
+  // It doubles as a load check: if the CSV goes missing in a deploy the map
+  // still renders, so without this the only symptom would be an empty map.
+  function renderCoverage() {
+    var withProjects = counties.filter(function (c) { return c.dc.projects.length > 0; });
+    var total = withProjects.reduce(function (n, c) { return n + c.dc.projects.length; }, 0);
+
+    if (!total) {
+      els.coverage.className = "coverage is-warning";
+      els.coverage.textContent =
+        "No data center projects loaded — data/datacenters.csv is missing or empty.";
+      console.warn("datacenters.csv produced no usable rows");
+      return;
+    }
+
+    els.coverage.className = "coverage";
+    els.coverage.textContent =
+      total + " data center projects publicly reported across " + withProjects.length +
+      " of " + counties.length + " counties. The remaining " +
+      (counties.length - withProjects.length) +
+      " have none publicly reported, which is not the same as having none.";
   }
 
   /* ------------------------------------------------------------- view/zoom */
@@ -1120,7 +1144,10 @@
       render();
       attachSearchEvents();
       attachChromeEvents();
-      setLayer("none");
+      renderCoverage();
+      // Open on the projects layer: with only a handful of counties carrying
+      // data, an unshaded map reads as an empty one.
+      setLayer("projects");
       els.search.placeholder = "Search " + counties.length + " counties…";
     }).catch(function (error) {
       if (location.protocol === "file:") {

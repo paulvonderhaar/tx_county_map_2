@@ -206,6 +206,19 @@ h1 {
 
 .legend-note { flex-basis: 100%; font-size: 0.75rem; opacity: 0.85; }
 
+.coverage {
+  margin: 0 0 0.6rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.coverage.is-warning {
+  padding: 0.45rem 0.65rem;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+}
+
 .btn {
   padding: 0.5rem 0.8rem;
   font: inherit;
