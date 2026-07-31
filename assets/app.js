@@ -693,18 +693,32 @@
     var sentences = [];
     var them = n === 1 ? "it" : "them";
 
-    var statuses = {};
-    dc.projects.forEach(function (p) { statuses[p.status] = (statuses[p.status] || 0) + 1; });
-    var kinds = Object.keys(statuses);
-    var lead = county.name + " County has " + count(n) + " publicly reported data center project" +
-      (n === 1 ? "" : "s");
+    // A county-level aggregate stands in for every facility in the county, so
+    // calling it "one project" would badly understate it.
+    var aggregated = dc.projects.some(function (p) {
+      return p.flags.indexOf("aggregate") > -1;
+    });
 
-    if (n > 1 && kinds.length === 1) {
-      sentences.push(lead + ", all " + kinds[0] + ".");
+    if (aggregated) {
+      sentences.push(
+        county.name + " County is recorded here as a single county-level entry " +
+        "standing in for every tracked facility in the county, because per-site " +
+        "figures are not published."
+      );
     } else {
-      sentences.push(lead + ": " + joinList(kinds.map(function (s) {
-        return n === 1 ? s : count(statuses[s]) + " " + s;
-      })) + ".");
+      var statuses = {};
+      dc.projects.forEach(function (p) { statuses[p.status] = (statuses[p.status] || 0) + 1; });
+      var kinds = Object.keys(statuses);
+      var lead = county.name + " County has " + count(n) +
+        " publicly reported data center project" + (n === 1 ? "" : "s");
+
+      if (n > 1 && kinds.length === 1) {
+        sentences.push(lead + ", all " + kinds[0] + ".");
+      } else {
+        sentences.push(lead + ": " + joinList(kinds.map(function (s) {
+          return n === 1 ? s : count(statuses[s]) + " " + s;
+        })) + ".");
+      }
     }
 
     if (!dc.powerDisclosed) {
