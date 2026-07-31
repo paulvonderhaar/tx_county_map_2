@@ -11,12 +11,15 @@
   --county-fill: #e3ded3;
   --county-hover: #cdbfa8;
   --county-stroke: #f6f5f2;
-  /* Sequential ramp for the shaded layers, light to dark. */
-  --level-1: #f4dbcd;
-  --level-2: #e3a884;
-  --level-3: #c8703f;
-  --level-4: #9c3d16;
-  --level-undisclosed: #b9b2a4;
+  /* Sequential ramp for the shaded layers. The lightest step has to read as
+     clearly orange against the unshaded fill above, because most counties land
+     in it and many are only ~20px across at full extent. */
+  --level-1: #f3b78a;
+  --level-2: #e08b4e;
+  --level-3: #c2632a;
+  --level-4: #96400f;
+  --level-undisclosed: #a79f8e;
+  --data-outline: #6b4a35;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 8px 24px rgb(0 0 0 / 0.10);
   --radius: 10px;
   /* Texas is a shade wider than it is tall, so the map's width follows from
@@ -37,11 +40,12 @@
     --county-fill: #33363a;
     --county-hover: #4e535a;
     --county-stroke: #17181a;
-    --level-1: #4a2c1d;
-    --level-2: #7c4527;
-    --level-3: #b26134;
-    --level-4: #e5813f;
-    --level-undisclosed: #5d6067;
+    --level-1: #7a4423;
+    --level-2: #a85c2c;
+    --level-3: #d1783c;
+    --level-4: #f09a55;
+    --level-undisclosed: #6f737a;
+    --data-outline: #e8c9a8;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.45);
   }
 }
@@ -283,6 +287,13 @@ h1 {
 .county.level-3 { fill: var(--level-3); }
 .county.level-4 { fill: var(--level-4); }
 .county.level-undisclosed { fill: url(#hatch); }
+
+/* Fill alone is not enough to find these. Hood County is about 20px across at
+   full extent, so any county carrying data is outlined too. */
+.county[class*="level-"] {
+  stroke: var(--data-outline);
+  stroke-width: 1.6;
+}
 
 .county.level-1:hover,
 .county.level-2:hover,
