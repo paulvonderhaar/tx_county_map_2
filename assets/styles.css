@@ -421,6 +421,14 @@ h1 {
 
 .popup-body .is-empty { color: var(--text-muted); font-style: italic; }
 
+/* The generated plain-English summary that opens the popup. */
+.dc-summary {
+  margin: 0 0 0.6rem;
+  padding-inline-start: 0.6rem;
+  border-inline-start: 3px solid var(--accent);
+  font-size: 0.9rem;
+}
+
 /* ------------------------------------------------- data centers in popup */
 
 .dc-section { margin-top: 0.85rem; border-top: 1px solid var(--border); padding-top: 0.7rem; }
