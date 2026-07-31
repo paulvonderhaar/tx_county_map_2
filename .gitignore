@@ -1,0 +1,17 @@
+# Cached Census download used by scripts/build_data.py
+scripts/.cache/
+
+# Local Claude Code settings (launch.json is kept — it documents local preview)
+.claude/settings.local.json
+
+# OS / editor noise
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+.venv/
+venv/

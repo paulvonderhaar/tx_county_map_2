@@ -1,0 +1,7 @@
+# Store text with LF in the repository and check it out that way, so editing
+# data/counties.csv in Excel, in the GitHub web editor, or via
+# scripts/build_data.py never produces a line-ending-only diff.
+* text=auto eol=lf
+
+*.png binary
+*.zip binary
