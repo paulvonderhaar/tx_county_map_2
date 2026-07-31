@@ -12,7 +12,10 @@
 <body>
   <header class="site-header">
     <h1>Texas Counties</h1>
-    <p class="tagline">All 254 of them. Click a county to read about it.</p>
+    <p class="tagline">
+      All 254 of them, and what is publicly known about the data centers being built in them.
+      Click a county to read about it.
+    </p>
   </header>
 
   <main>
@@ -43,6 +46,16 @@
       </div>
     </div>
 
+    <div class="layers" role="group" aria-label="Map layer">
+      <span class="layers-label">Shade counties by</span>
+      <button type="button" class="layer-btn is-active" data-layer="none" aria-pressed="true">Nothing</button>
+      <button type="button" class="layer-btn" data-layer="projects" aria-pressed="false">Projects</button>
+      <button type="button" class="layer-btn" data-layer="power" aria-pressed="false">Power</button>
+      <button type="button" class="layer-btn" data-layer="water" aria-pressed="false">Water</button>
+    </div>
+
+    <div id="legend" class="legend" hidden></div>
+
     <div id="map" class="map">
       <p id="status" class="status">Loading map…</p>
 
@@ -65,6 +78,13 @@
   </main>
 
   <footer class="site-footer">
+    <p>
+      <strong>Every figure on this map comes from a published source, linked in the popup.</strong>
+      Nothing is estimated or modelled. Texas keeps no public registry of data centers and does not
+      require operators to report power or water use, so a county shaded as having no known projects
+      means none have been publicly reported &mdash; not that none exist. Power and water totals are
+      floors, not ceilings.
+    </p>
     <p>
       Boundaries: <a href="https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html">U.S. Census Bureau</a>
       cartographic boundary files, 2024 (public domain).
