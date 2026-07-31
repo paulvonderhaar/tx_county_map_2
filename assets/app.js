@@ -12,6 +12,7 @@
   var GEOJSON_URL = "data/tx-counties.geojson";
   var CSV_URL = "data/counties.csv";
   var DATACENTERS_URL = "data/datacenters.csv";
+  var PRICES_URL = "data/power_prices.csv";
 
   var VIEW_WIDTH = 1000;   // SVG user units across the widest part of Texas
   var MAX_ZOOM = 40;       // how far in the viewBox may zoom
@@ -51,46 +52,56 @@
 
   /* --------------------------------------------------------------- layers */
 
-  // Each layer reads one aggregate off a county and sorts it into a bin.
-  // Bins run highest first so the first match wins.
+  // Each layer decides which counties it applies to, reads one value off a
+  // county, and sorts it into a bin. Bins run highest first so the first
+  // match wins. `applies` false renders plain; `applies` true but `disclosed`
+  // false renders hatched, meaning "we know something is here but the figure
+  // is not published".
   var LAYERS = {
     projects: {
-      label: "Projects",
-      value: function (dc) { return dc.projects.length; },
+      label: "Data centers",
+      applies: function (c) { return c.dc.projects.length > 0; },
       disclosed: function () { return true; }, // a project is its own evidence
-      format: function (v) { return v === 1 ? "1 project" : v + " projects"; },
+      value: function (c) { return c.dc.projects.length; },
       bins: [
         { min: 4, label: "4 or more" },
         { min: 2, label: "2 to 3" },
         { min: 1, label: "1" }
       ],
+      emptyLabel: "no projects publicly reported",
+      undisclosedLabel: "projects known, figure not published",
       note: "Counts publicly reported projects, at any stage from proposed to operating."
     },
     power: {
-      label: "Power",
-      value: function (dc) { return dc.powerMw; },
-      disclosed: function (dc) { return dc.powerDisclosed > 0; },
-      format: formatMw,
+      label: "Power demand",
+      applies: function (c) { return c.dc.projects.length > 0; },
+      disclosed: function (c) { return c.dc.powerDisclosed > 0; },
+      value: function (c) { return c.dc.powerMw; },
       bins: [
         { min: 5000, label: "5,000 MW or more" },
         { min: 1000, label: "1,000 to 4,999 MW" },
         { min: 250, label: "250 to 999 MW" },
         { min: 1, label: "under 250 MW" }
       ],
-      note: "Totals add each project's lowest published figure, so they are floors. Announced capacity is not built capacity."
+      emptyLabel: "no projects publicly reported",
+      undisclosedLabel: "projects known, figure not published",
+      note: "Data center demand. Totals add each project's lowest published figure, so they are floors. Announced capacity is not built capacity."
     },
-    water: {
-      label: "Water",
-      value: function (dc) { return dc.waterGpd; },
-      disclosed: function (dc) { return dc.waterDisclosed > 0; },
-      format: formatGpd,
+    // Unlike the layers above, this one is about households rather than data
+    // centers, and covers almost the whole state.
+    cost: {
+      label: "Electricity cost",
+      applies: function (c) { return c.price !== null; },
+      disclosed: function () { return true; },
+      value: function (c) { return c.price.change; },
       bins: [
-        { min: 5000000, label: "5m gal/day or more" },
-        { min: 1000000, label: "1m to 4.9m gal/day" },
-        { min: 100000, label: "100k to 999k gal/day" },
-        { min: 1, label: "under 100k gal/day" }
+        { min: 30, label: "up 30% or more" },
+        { min: 20, label: "up 20 to 29%" },
+        { min: 10, label: "up 10 to 19%" },
+        { min: -100, label: "up under 10%, or down" }
       ],
-      note: "Water disclosure is voluntary in Texas and most operators publish nothing."
+      emptyLabel: "no price data",
+      note: "Change in the residential rate charged by utilities operating in each county, 2019 to 2024, from EIA Form 861. This is not caused by data centers and is not presented as such: rates rose statewide over this period for many reasons. Compare the layers, do not conflate them."
     }
   };
 
@@ -212,6 +223,41 @@
     });
   }
 
+  // Residential electricity rates, from EIA Form 861. Column names carry the
+  // years so the CSV stays readable; they are discovered rather than hardcoded
+  // so rebuilding for a different span needs no code change.
+  function attachPrices(records) {
+    if (!records.length) return;
+
+    var keys = Object.keys(records[0]).filter(function (k) {
+      return k.indexOf("cents_per_kwh_") === 0;
+    }).sort();
+    if (keys.length < 2) {
+      console.warn("power_prices.csv: expected two cents_per_kwh_<year> columns");
+      return;
+    }
+    var fromKey = keys[0];
+    var toKey = keys[keys.length - 1];
+
+    records.forEach(function (record) {
+      var county = byFips[record.fips];
+      if (!county) {
+        if (record.fips) console.warn("power_prices.csv: unknown FIPS " + record.fips);
+        return;
+      }
+      var change = parseFloat(record.percent_change);
+      if (!isFinite(change)) return;
+      county.price = {
+        fromYear: fromKey.replace("cents_per_kwh_", ""),
+        toYear: toKey.replace("cents_per_kwh_", ""),
+        from: parseFloat(record[fromKey]),
+        to: parseFloat(record[toKey]),
+        change: change,
+        utilities: parseInt(record.utilities, 10) || 0
+      };
+    });
+  }
+
   /* ----------------------------------------------------------- projection */
 
   // Albers equal-area conic using the parameters of EPSG:3083 (Texas Centric
@@ -293,7 +339,8 @@
         // Rough rendered width of the label in px, for the does-it-fit test.
         labelWidth: props.name.length * LABEL_PX * 0.55,
         description: "",
-        dc: { projects: [], powerMw: 0, waterGpd: 0, powerDisclosed: 0, waterDisclosed: 0 }
+        dc: { projects: [], powerMw: 0, waterGpd: 0, powerDisclosed: 0, waterDisclosed: 0 },
+        price: null
       };
     });
   }
@@ -365,9 +412,9 @@
   var LEVEL_CLASSES = ["level-1", "level-2", "level-3", "level-4", "level-undisclosed"];
 
   function levelFor(layer, county) {
-    if (!county.dc.projects.length) return null;
-    if (!layer.disclosed(county.dc)) return "level-undisclosed";
-    var value = layer.value(county.dc);
+    if (!layer.applies(county)) return null;
+    if (!layer.disclosed(county)) return "level-undisclosed";
+    var value = layer.value(county);
     for (var i = 0; i < layer.bins.length; i++) {
       if (value >= layer.bins[i].min) return "level-" + (layer.bins.length - i);
     }
@@ -421,12 +468,16 @@
       );
     });
 
+    // Only layers that can have a "known but unpublished" state get the hatch
+    // swatch. The cost layer either has a price or has none.
+    if (layer.undisclosedLabel) {
+      els.legend.appendChild(legendItem(
+        "background: repeating-linear-gradient(45deg, var(--level-undisclosed) 0 3px, var(--county-fill) 3px 7px)",
+        layer.undisclosedLabel
+      ));
+    }
     els.legend.appendChild(legendItem(
-      "background: repeating-linear-gradient(45deg, var(--level-undisclosed) 0 3px, var(--county-fill) 3px 7px)",
-      "projects known, figure not published"
-    ));
-    els.legend.appendChild(legendItem(
-      "background: var(--county-fill)", "no projects publicly reported"
+      "background: var(--county-fill)", layer.emptyLabel
     ));
 
     var note = document.createElement("span");
@@ -618,6 +669,7 @@
       });
     }
 
+    renderPrice(county);
     renderProjects(county);
 
     els.popup.classList.toggle("has-projects", county.dc.projects.length > 0);
@@ -779,6 +831,53 @@
     }
 
     return sentences.join(" ");
+  }
+
+  function renderPrice(county) {
+    var price = county.price;
+    if (!price) return;
+
+    var section = document.createElement("div");
+    section.className = "price-section";
+
+    var heading = document.createElement("h3");
+    heading.className = "dc-heading";
+    heading.textContent = "Residential electricity";
+    section.appendChild(heading);
+
+    var line = document.createElement("p");
+    line.className = "price-line";
+    var strong = document.createElement("strong");
+    var sign = price.change >= 0 ? "+" : "";
+    strong.textContent = sign + price.change.toFixed(1) + "%";
+    line.appendChild(strong);
+    line.appendChild(document.createTextNode(
+      " from " + price.from.toFixed(2) + "¢ to " + price.to.toFixed(2) +
+      "¢ per kWh, " + price.fromYear + " to " + price.toYear + "."
+    ));
+    section.appendChild(line);
+
+    var caveat = document.createElement("p");
+    caveat.className = "dc-caveat";
+    caveat.textContent =
+      "Sales-weighted average of the rates charged by the " + price.utilities +
+      " utilit" + (price.utilities === 1 ? "y" : "ies") + " operating here, not " +
+      "the average bill paid. Texas sets no price by county: in the deregulated " +
+      "area households choose among many providers and plans.";
+    section.appendChild(caveat);
+
+    var source = document.createElement("p");
+    source.className = "dc-source";
+    var link = document.createElement("a");
+    link.href = "https://www.eia.gov/electricity/data/eia861/";
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "U.S. EIA Form 861";
+    source.appendChild(document.createTextNode("Source: "));
+    source.appendChild(link);
+    section.appendChild(source);
+
+    els.popupBody.appendChild(section);
   }
 
   function renderProjects(county) {
@@ -1263,6 +1362,9 @@
         .catch(function () { return ""; }),
       fetch(DATACENTERS_URL)
         .then(function (response) { return response.ok ? response.text() : ""; })
+        .catch(function () { return ""; }),
+      fetch(PRICES_URL)
+        .then(function (response) { return response.ok ? response.text() : ""; })
         .catch(function () { return ""; })
     ]).then(function (results) {
       counties = buildCounties(results[0].features);
@@ -1275,6 +1377,7 @@
       });
 
       attachDataCenters(csvToRecords(results[2]));
+      attachPrices(csvToRecords(results[3]));
 
       render();
       attachSearchEvents();

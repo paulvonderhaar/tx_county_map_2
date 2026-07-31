@@ -429,6 +429,22 @@ h1 {
   font-size: 0.9rem;
 }
 
+/* ------------------------------------------------------ prices in popup */
+
+.price-section {
+  margin-top: 0.85rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border);
+}
+
+.price-line {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.price-line strong { color: var(--accent); }
+
 /* ------------------------------------------------- data centers in popup */
 
 .dc-section { margin-top: 0.85rem; border-top: 1px solid var(--border); padding-top: 0.7rem; }
