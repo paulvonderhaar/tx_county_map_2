@@ -592,12 +592,24 @@
     els.popupBody.textContent = "";
 
     var paragraphs = county.description ? county.description.split(/\n\s*\n/) : [];
+    var summary = summarise(county);
+
+    // The generated summary leads, so a county with data centers never opens
+    // on "No description yet" when there is plenty to say about it.
+    if (summary) {
+      var lede = document.createElement("p");
+      lede.className = "dc-summary";
+      lede.textContent = summary;
+      els.popupBody.appendChild(lede);
+    }
 
     if (!paragraphs.length) {
-      var empty = document.createElement("p");
-      empty.className = "is-empty";
-      empty.textContent = "No description yet.";
-      els.popupBody.appendChild(empty);
+      if (!summary) {
+        var empty = document.createElement("p");
+        empty.className = "is-empty";
+        empty.textContent = "No description yet.";
+        els.popupBody.appendChild(empty);
+      }
     } else {
       paragraphs.forEach(function (text) {
         var p = document.createElement("p");
@@ -613,10 +625,7 @@
     positionPopup(county);
     announce(
       county.name + " County. " +
-      (county.description || "No description yet.") + " " +
-      (county.dc.projects.length
-        ? county.dc.projects.length + " data center projects publicly reported."
-        : "No data center projects publicly reported.")
+      (summary || county.description || "No data center projects publicly reported.")
     );
   }
 
@@ -644,6 +653,118 @@
       span.appendChild(unknown);
     }
     return span;
+  }
+
+  /* --------------------------------------------------- prose summary */
+
+  var NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six",
+    "seven", "eight", "nine", "ten", "eleven", "twelve"];
+
+  function count(n) {
+    return n < NUMBER_WORDS.length ? NUMBER_WORDS[n] : n.toLocaleString("en-US");
+  }
+
+  function gallonsProse(gpd) {
+    if (gpd >= 1000000) {
+      return (gpd / 1000000).toLocaleString("en-US", { maximumFractionDigits: 2 }) +
+        " million gallons a day";
+    }
+    return Math.round(gpd).toLocaleString("en-US") + " gallons a day";
+  }
+
+  function joinList(items) {
+    if (items.length === 1) return items[0];
+    return items.slice(0, -1).join(", ") + " and " + items[items.length - 1];
+  }
+
+  function cap(text) {
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  // Written from the structured rows rather than stored as text, so the prose
+  // cannot drift out of step with datacenters.csv. Phrasing stays neutral about
+  // tense ("published figures") because a county can mix an operating site's
+  // measured use with an announced site's projection.
+  function summarise(county) {
+    var dc = county.dc;
+    var n = dc.projects.length;
+    if (!n) return null;
+
+    var sentences = [];
+    var them = n === 1 ? "it" : "them";
+
+    var statuses = {};
+    dc.projects.forEach(function (p) { statuses[p.status] = (statuses[p.status] || 0) + 1; });
+    var kinds = Object.keys(statuses);
+    var lead = county.name + " County has " + count(n) + " publicly reported data center project" +
+      (n === 1 ? "" : "s");
+
+    if (n > 1 && kinds.length === 1) {
+      sentences.push(lead + ", all " + kinds[0] + ".");
+    } else {
+      sentences.push(lead + ": " + joinList(kinds.map(function (s) {
+        return n === 1 ? s : count(statuses[s]) + " " + s;
+      })) + ".");
+    }
+
+    if (!dc.powerDisclosed) {
+      sentences.push(n === 1
+        ? "No power figure has been published."
+        : "None of them has published a power figure.");
+    } else if (dc.powerDisclosed === n) {
+      // "comes to" rather than "published": a figure may be derived here rather
+      // than reported, and the caveat sentence below says which.
+      sentences.push(n === 1
+        ? "Its power demand comes to " + formatMw(dc.powerMw) + "."
+        : "Their power demand comes to " + formatMw(dc.powerMw) + ".");
+    } else {
+      sentences.push(
+        cap(count(dc.powerDisclosed)) + " of the " + count(n) + " " +
+        (dc.powerDisclosed === 1 ? "discloses" : "disclose") + " power demand, totalling " +
+        formatMw(dc.powerMw) + "; " +
+        (n - dc.powerDisclosed === 1 ? "the other has" : "the others have") +
+        " published none."
+      );
+    }
+
+    if (!dc.waterDisclosed) {
+      sentences.push(n === 1
+        ? "No water figure has been published either."
+        : "No water figure has been published for any of " + them + ".");
+    } else if (dc.waterDisclosed === n) {
+      sentences.push(n === 1
+        ? "Its water use comes to " + gallonsProse(dc.waterGpd) + "."
+        : "Their water use comes to " + gallonsProse(dc.waterGpd) + ".");
+    } else {
+      sentences.push(
+        cap(count(dc.waterDisclosed)) + " " +
+        (dc.waterDisclosed === 1 ? "discloses" : "disclose") + " water use, totalling " +
+        gallonsProse(dc.waterGpd) + "."
+      );
+    }
+
+    var flags = {};
+    dc.projects.forEach(function (p) {
+      p.flags.forEach(function (f) { flags[f] = (flags[f] || 0) + 1; });
+    });
+    // Phrased without committing to a count: one row can carry several flags
+    // at once, so "one figure is X and one is Y" would misdescribe Bexar, where
+    // a single figure is both derived and combined.
+    var caveats = [];
+    if (flags.disputed) caveats.push("disputed by the developer");
+    if (flags.derived) caveats.push("calculated here rather than reported");
+    if (flags.combined) caveats.push("covering several projects at once");
+    if (caveats.length) {
+      sentences.push("Check the flags on the cards below: " + joinList(caveats) + ".");
+    }
+
+    if (dc.powerDisclosed < n || dc.waterDisclosed < n) {
+      sentences.push(
+        "Texas requires no public reporting of power or water use, so treat these as floors."
+      );
+    }
+
+    return sentences.join(" ");
   }
 
   function renderProjects(county) {
